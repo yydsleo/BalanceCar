@@ -571,6 +571,6 @@ float velocityClosedloop(struct Motor* motor, float target_velocity) {
     float pi = kp * dvelocity + ki * motor->integral;
     float Up = _constrain(pi * 180 / M_PI, -motor->voltage_limit, motor->voltage_limit);
 
-    setTorqueSVPWM(motor, Up, _electricalAngle(motor));
+    // setTorqueSVPWM(motor, Up, _electricalAngle(motor));
     return 0;
 }
