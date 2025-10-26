@@ -24,6 +24,9 @@ struct LowsideCurrentSense {
     float adc_value_c;
 };
 
+#define MOTOR_DIRECTION_CW 1
+#define MOTOR_DIRECTION_CCW -1
+
 struct Motor {
     char *name;
     gpio_num_t pin_pwm_1;
@@ -52,6 +55,7 @@ struct Motor {
     float dc_a;
     float dc_b;
     float dc_c;
+    int direction;
     // 电机参数
     float velocity;
     float integral;

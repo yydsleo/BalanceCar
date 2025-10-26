@@ -31,6 +31,8 @@
 #define _PI_2 1.57079632679f
 #define _PI_3 1.0471975512f
 #define _3PI_2 4.71238898038f
+#define _2PI 6.28318530718f
+
 
 static const char *TAG = "motor";
 
@@ -144,6 +146,7 @@ struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t p
     motor->voltage_power_supply = 8.2;
     motor->voltage_limit = 1.5;
     motor->start_ts = esp_timer_get_time();
+    motor->direction = MOTOR_DIRECTION_CW;
 
     // set pole pair number
     motor->pp = pp;
@@ -304,16 +307,52 @@ void motor_run(struct Motor* motor) {
 }
 
 void motor_align(struct Motor* motor) { 
-    // setTorque(motor, 3, _3PI_2);
-    setTorqueSVPWM(motor, 2.0, _3PI_2);
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    for (int i = 0; i <= 500; i++) {
+        float angle = _3PI_2 + _2PI * i / 500.0f;
+        setTorqueSVPWM(motor, motor->voltage_limit, angle);
+        float read_angle;
+        as5600_read_angle(motor, &read_angle);
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+    float mid_angle;
+    as5600_read_angle(motor, &mid_angle);
+    printf("mid_angle: %f\n", mid_angle);
+    for (int i = 500; i >= 0; i--) {
+        float angle = _3PI_2 + _2PI * i / 500.0f;
+        setTorqueSVPWM(motor, motor->voltage_limit, angle);
+        float read_angle;
+        as5600_read_angle(motor, &read_angle);
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+
+    float end_angle;
+    as5600_read_angle(motor, &end_angle);
+    printf("end_angle: %f\n", end_angle);
+    float moved = fabs(mid_angle - end_angle);
+
+    setTorqueSVPWM(motor, 0, 0);
+    vTaskDelay(pdMS_TO_TICKS(200));
+    printf("moved: %f\n", moved);
+    if (moved < _2PI / 101.0f) {
+        motor->direction = MOTOR_DIRECTION_CW;
+        ESP_LOGE(TAG, "motor align failed");
+        // return;
+    } else if (mid_angle < end_angle) {
+        motor->direction = MOTOR_DIRECTION_CCW;
+    } else {
+        motor->direction = MOTOR_DIRECTION_CW;
+    }
+    printf("motor direction: %d\n", motor->direction);
+
+    setTorqueSVPWM(motor, 0, _3PI_2);
+    vTaskDelay(pdMS_TO_TICKS(700));
     float angle = 0;
     as5600_read_angle(motor, &angle);
-    // setTorqueSVPWM(motor, 0.0, _3PI_2);
-    setTorqueSVPWM(motor, 0.0, 0.0);
-    vTaskDelay(pdMS_TO_TICKS(500));
     motor->zero_electric_angle = 0;
     motor->zero_electric_angle = _electricalAngle(motor);
+    vTaskDelay(pdMS_TO_TICKS(20));
+    setTorqueSVPWM(motor, 0, 0);
+    vTaskDelay(pdMS_TO_TICKS(200));
 
     // 把这个zero_electric_angle设置成-0.2转速会更大，可以到1800rpm
     // motor->zero_electric_angle = 0;
@@ -392,7 +431,7 @@ float _normalizeAngle(float angle){
 
 float _electricalAngle(struct Motor* motor) {
     float angle = motor->angle_without_track;
-    return _normalizeAngle(motor->pp * angle) - motor->zero_electric_angle;
+    return _normalizeAngle((motor->direction * motor->pp) * angle) - motor->zero_electric_angle;
 }
 
 void setPhaseVoltage(struct Motor* motor, float Uq,float Ud, float angle_el) {
@@ -513,7 +552,7 @@ float positionClosedloop(struct Motor* motor, float target_angle) {
     cnt++;
     if (cur_us - prev_us > 1000000) {
         // printf("speed: %f, cnt: %d, angle: %f, target angle: %f\n", cur_speed, cnt, angle, target_angle);
-        prev_us = cur_us;
+        prev_us = cur_us;/
         prev_angle = angle;
         cnt = 0;
     }

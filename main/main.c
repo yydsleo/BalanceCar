@@ -12,8 +12,8 @@ struct Motor *left_motor, *right_motor;
 void foc_driver() {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        // motor_run(left_motor);
-        motor_run(right_motor);
+        motor_run(left_motor);
+        // motor_run(right_motor);
     }
 }
 
@@ -37,11 +37,11 @@ void app_main(void)
     right_motor->name = "right";
     right_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, ADC_CHANNEL_1, ADC_CHANNEL_2);
 
-    left_motor->target_velocity = 50;
-    right_motor->target_velocity = 50;
+    left_motor->target_velocity = 100;
+    // right_motor->target_velocity = -50;
 
     motor_align(left_motor);
-    motor_align(right_motor);
+    // motor_align(right_motor);
 
     xTaskCreatePinnedToCore(&foc_driver, "foc_driver", 4 * 1024, NULL, 5, &foc_driver_task_handle, 1);
 
