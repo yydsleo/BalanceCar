@@ -456,6 +456,13 @@ CONFIG_SECURE_ROM_DL_MODE_ENABLED=y
 # end of Security features
 
 #
+# Example Board Configuration
+#
+# CONFIG_ESP_LYRAT_V4_3_BOARD is not set
+CONFIG_ESP_CUSTOM_BOARD=y
+# end of Example Board Configuration
+
+#
 # Application manager
 #
 CONFIG_APP_COMPILE_TIME_DATE=y
@@ -1074,6 +1081,12 @@ CONFIG_BLE_MESH_DISCARD_OLD_SEQ_AUTH=y
 # end of BLE Mesh specific test option
 
 # CONFIG_BLE_MESH_EXPERIMENTAL is not set
+
+#
+# BTstack Configuration
+#
+# CONFIG_BTSTACK_AUDIO is not set
+# end of BTstack Configuration
 
 #
 # Console Library

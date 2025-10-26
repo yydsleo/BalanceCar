@@ -546,15 +546,17 @@ float velocityClosedloop(struct Motor* motor, float target_velocity) {
     motor->velocity = motor->velocity * alpha + cur_velocity * (1 - alpha);
 
     if (motor->cnt >= 4000) {
-        printf("name: %s, velocity: %f, target velocity: %f\n",
-                motor->name, motor->velocity, target_velocity);
+        // printf("name: %s, velocity: %f, target velocity: %f\n",
+        //        motor->name, motor->velocity, target_velocity);
         motor->cnt = 0;
         lowside_current_sense_read(motor->lowside_current_sense);
+        /*
         printf("name: %s, a: %f, b: %f, c: %f\n",
                 motor->name,
                 motor->lowside_current_sense->adc_value_a,
                 motor->lowside_current_sense->adc_value_b,
                 motor->lowside_current_sense->adc_value_c);
+        */
     }
     motor->cnt++;
 
@@ -571,6 +573,6 @@ float velocityClosedloop(struct Motor* motor, float target_velocity) {
     float pi = kp * dvelocity + ki * motor->integral;
     float Up = _constrain(pi * 180 / M_PI, -motor->voltage_limit, motor->voltage_limit);
 
-    // setTorqueSVPWM(motor, Up, _electricalAngle(motor));
+    setTorqueSVPWM(motor, Up, _electricalAngle(motor));
     return 0;
 }

@@ -12,7 +12,7 @@ struct Motor *left_motor, *right_motor;
 void foc_driver() {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        motor_run(left_motor);
+        // motor_run(left_motor);
         motor_run(right_motor);
     }
 }
@@ -21,22 +21,24 @@ void app_main(void)
 {
     TaskHandle_t foc_driver_task_handle;
     foc_init();
+    gpio_set_direction(12, GPIO_MODE_OUTPUT);
+    gpio_set_level(12, 1);
     // init motor
     // adc unit
     adc_oneshot_unit_handle_t adc_handle = new_lowside_current_sense_adc_unit();
-    left_motor = new_foc_motor(12, 11, 10, LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_TIMER_0, 7);
-    left_motor->i2c_dev_handle = foc_motor_i2c_init(8, 9, I2C_NUM_0);
+    left_motor = new_foc_motor(17, 16, 15, LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_TIMER_0, 7);
+    left_motor->i2c_dev_handle = foc_motor_i2c_init(7, 6, I2C_NUM_0);
     left_motor->name = "left";
     // left_motor->lowside_current_sense = new_lowside_current_sense(2, 3, 0);
     left_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, ADC_CHANNEL_3, ADC_CHANNEL_4);
 
-    right_motor = new_foc_motor(35, 34, 33, LEDC_CHANNEL_3, LEDC_CHANNEL_4, LEDC_CHANNEL_5, LEDC_TIMER_1, 7);
-    right_motor->i2c_dev_handle = foc_motor_i2c_init(37, 36, I2C_NUM_1);
+    right_motor = new_foc_motor(42, 41, 40, LEDC_CHANNEL_3, LEDC_CHANNEL_4, LEDC_CHANNEL_5, LEDC_TIMER_1, 7);
+    right_motor->i2c_dev_handle = foc_motor_i2c_init(13, 14, I2C_NUM_1);
     right_motor->name = "right";
     right_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, ADC_CHANNEL_1, ADC_CHANNEL_2);
 
-    left_motor->target_velocity = 100;
-    right_motor->target_velocity = 100;
+    left_motor->target_velocity = 50;
+    right_motor->target_velocity = 50;
 
     motor_align(left_motor);
     motor_align(right_motor);
