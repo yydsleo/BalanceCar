@@ -13,7 +13,7 @@ void foc_driver() {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         motor_run(left_motor);
-        // motor_run(right_motor);
+        motor_run(right_motor);
     }
 }
 
@@ -30,18 +30,20 @@ void app_main(void)
     left_motor->i2c_dev_handle = foc_motor_i2c_init(7, 6, I2C_NUM_0);
     left_motor->name = "left";
     // left_motor->lowside_current_sense = new_lowside_current_sense(2, 3, 0);
-    left_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, ADC_CHANNEL_3, ADC_CHANNEL_4);
+    left_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, 0.005f, 50.0f, ADC_CHANNEL_3, ADC_CHANNEL_4);
+    lowside_current_sense_init(left_motor->lowside_current_sense);
 
     right_motor = new_foc_motor(42, 41, 40, LEDC_CHANNEL_3, LEDC_CHANNEL_4, LEDC_CHANNEL_5, LEDC_TIMER_1, 7);
     right_motor->i2c_dev_handle = foc_motor_i2c_init(13, 14, I2C_NUM_1);
     right_motor->name = "right";
-    right_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, ADC_CHANNEL_1, ADC_CHANNEL_2);
+    right_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, 0.005f, 50.0f, ADC_CHANNEL_8, ADC_CHANNEL_9);
+    lowside_current_sense_init(right_motor->lowside_current_sense);
 
-    left_motor->target_velocity = 100;
-    // right_motor->target_velocity = -50;
+    left_motor->target_velocity = -50;
+    right_motor->target_velocity = 50;
 
     motor_align(left_motor);
-    // motor_align(right_motor);
+    motor_align(right_motor);
 
     xTaskCreatePinnedToCore(&foc_driver, "foc_driver", 4 * 1024, NULL, 5, &foc_driver_task_handle, 1);
 

@@ -22,6 +22,24 @@ struct LowsideCurrentSense {
     float adc_value_a;
     float adc_value_b;
     float adc_value_c;
+    float voltage_a;
+    float voltage_b;
+    float voltage_c;
+    float current_a;
+    float current_b;
+    float current_c;
+    float iq;
+    float lowpass_filter;
+
+    float offset_a;
+    float offset_b;
+    float offset_c;
+
+    float gain_a;
+    float gain_b;
+    float gain_c;
+    float shunt_resistor;
+    float gain;
 };
 
 #define MOTOR_DIRECTION_CW 1
@@ -106,8 +124,12 @@ GPIO 13	ADC2	CH2	可能与Wi-Fi冲突
 GPIO 14	ADC2	CH3	可能与Wi-Fi冲突
 */
 adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit();
-struct LowsideCurrentSense* new_lowside_current_sense(adc_oneshot_unit_handle_t adc_handle, adc_channel_t channel1, adc_channel_t channel2);
-void lowside_current_sense_read(struct LowsideCurrentSense *lcs);
+struct LowsideCurrentSense* new_lowside_current_sense(adc_oneshot_unit_handle_t adc_handle, float shunt_resistor, float gain, adc_channel_t channel1, adc_channel_t channel2);
+void lowside_current_sense_init(struct LowsideCurrentSense *lcs);
+void lowside_current_sense_read_voltage(struct LowsideCurrentSense *lcs);
+void lowside_current_sense_read_current(struct LowsideCurrentSense *lcs);
+float lowside_current_sense_get_iq(struct LowsideCurrentSense *lcs, float angle);
+
 
 // as5600
 i2c_master_dev_handle_t foc_motor_i2c_init(gpio_num_t pin_sda, gpio_num_t pin_scl, i2c_port_t port);
@@ -130,4 +152,5 @@ void setTorqueSVPWM(struct Motor* motor, float Uq, float angle_el);
 float velocityOpenloop(struct Motor* motor, float target_velocity);
 float positionClosedloop(struct Motor* motor, float target_angle);
 float velocityClosedloop(struct Motor* motor, float target_velocity);
+
 #endif
