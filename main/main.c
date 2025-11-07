@@ -12,7 +12,7 @@ struct Motor *left_motor, *right_motor;
 void foc_driver() {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        motor_run(left_motor);
+        // motor_run(left_motor);
         motor_run(right_motor);
     }
 }
@@ -40,7 +40,7 @@ void app_main(void)
     lowside_current_sense_init(right_motor->lowside_current_sense);
 
     left_motor->target_velocity = -50;
-    right_motor->target_velocity = 50;
+    right_motor->target_velocity = -50;
 
     motor_align(left_motor);
     motor_align(right_motor);
