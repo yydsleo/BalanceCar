@@ -359,6 +359,13 @@ void motor_align(struct Motor* motor) {
     printf("zero angle: %f\n", motor->zero_electric_angle);
 }
 
+
+adc_channel_t get_channel_by_pin(int pin) {
+    ESP_ERROR_CHECK(!(pin >= 1 && pin <= 10));
+    adc_channel_t table[11] = {0, ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6, ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9};
+    return table[pin];
+}
+
 adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit() {
     adc_oneshot_unit_handle_t adc_handle;
     adc_oneshot_unit_init_cfg_t init_config1 = {
@@ -375,7 +382,7 @@ adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit() {
     return adc_handle;
 }
 
-struct LowsideCurrentSense* new_lowside_current_sense(adc_oneshot_unit_handle_t adc_handle, float shunt_resistor, float gain, adc_channel_t channel1, adc_channel_t channel2) {
+struct LowsideCurrentSense* new_lowside_current_sense(adc_oneshot_unit_handle_t adc_handle, float shunt_resistor, float gain, int pin_a, int pin_b, int pin_c) {
     struct LowsideCurrentSense *lowside_current_sense = malloc(sizeof(struct LowsideCurrentSense));
     if (lowside_current_sense == NULL) {
         ESP_LOGE(TAG, "malloc memory failed!");
@@ -386,11 +393,20 @@ struct LowsideCurrentSense* new_lowside_current_sense(adc_oneshot_unit_handle_t 
         .atten = ADC_ATTEN_DB_12,   // 设置衰减，以调整测量电压范围
         .bitwidth = ADC_BITWIDTH_DEFAULT, // 设置输出位宽
     };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, channel1, &config)); // 此处以配置通道2为例
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, channel2, &config)); // 此处以配置通道2为例
     lowside_current_sense->adc_handle = adc_handle;
-    lowside_current_sense->channel_a = channel1;
-    lowside_current_sense->channel_b = channel2;
+
+    if (pin_a != 0) {
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, get_channel_by_pin(pin_a), &config)); // 此处以配置通道2为例
+        lowside_current_sense->channel_a = get_channel_by_pin(pin_a);
+    }
+    if (pin_b != 0) {
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, get_channel_by_pin(pin_b), &config)); // 此处以配置通道2为例
+        lowside_current_sense->channel_b = get_channel_by_pin(pin_b);
+    }
+    if (pin_c != 0) {
+        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, get_channel_by_pin(pin_c), &config)); // 此处以配置通道2为例
+        lowside_current_sense->channel_c = get_channel_by_pin(pin_c);
+    }
 
     // gain是电压放大倍数，也就是增益系数
     // shut_resistor是采样电阻的阻值

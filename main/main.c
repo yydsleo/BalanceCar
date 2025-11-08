@@ -30,13 +30,13 @@ void app_main(void)
     left_motor->i2c_dev_handle = foc_motor_i2c_init(8, 9, I2C_NUM_0);
     left_motor->name = "left";
     // left_motor->lowside_current_sense = new_lowside_current_sense(2, 3, 0);
-    left_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, 0.005f, 50.0f, ADC_CHANNEL_3, ADC_CHANNEL_4);
+    left_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, 0.005f, 50.0f, 2, 3, 0);
     lowside_current_sense_init(left_motor->lowside_current_sense);
 
     right_motor = new_foc_motor(35, 34, 33, LEDC_CHANNEL_3, LEDC_CHANNEL_4, LEDC_CHANNEL_5, LEDC_TIMER_1, 7);
     right_motor->i2c_dev_handle = foc_motor_i2c_init(37, 36, I2C_NUM_1);
     right_motor->name = "right";
-    right_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, 0.005f, 50.0f, ADC_CHANNEL_1, ADC_CHANNEL_2);
+    right_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, 0.005f, 50.0f, 4, 5, 0);
     lowside_current_sense_init(right_motor->lowside_current_sense);
 
     left_motor->target_velocity = 50;

@@ -123,8 +123,9 @@ GPIO 12	ADC2	CH1	可能与Wi-Fi冲突
 GPIO 13	ADC2	CH2	可能与Wi-Fi冲突
 GPIO 14	ADC2	CH3	可能与Wi-Fi冲突
 */
+adc_channel_t get_channel_by_pin(int pin);
 adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit();
-struct LowsideCurrentSense* new_lowside_current_sense(adc_oneshot_unit_handle_t adc_handle, float shunt_resistor, float gain, adc_channel_t channel1, adc_channel_t channel2);
+struct LowsideCurrentSense* new_lowside_current_sense(adc_oneshot_unit_handle_t adc_handle, float shunt_resistor, float gain, int pin_a, int pin_b, int pin_c);
 void lowside_current_sense_init(struct LowsideCurrentSense *lcs);
 void lowside_current_sense_read_voltage(struct LowsideCurrentSense *lcs);
 void lowside_current_sense_read_current(struct LowsideCurrentSense *lcs);
