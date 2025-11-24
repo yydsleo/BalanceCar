@@ -12,15 +12,6 @@
 
 #define MOTOR_PWM_FREQ 20000
 
-#define AS5600_ADDRESS 0x36
-// 原始角度值
-#define AS5600_REG_RAW_ANGLE 0x0C
-// 滤波后的角度值
-#define AS5600_REG_ANGLE 0x0E
-// 状态寄存器
-#define AS5600_REG_STATUS 0x0B
-// 配置寄存器
-#define AS5600_REG_CONFIG 0x09
 
 // SVPWM
 #define _SQRT3 1.73205080757f
@@ -152,146 +143,11 @@ struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t p
     motor->pp = pp;
 
     // init motor param
-    motor->velocity = 0.0;
     motor->integral = 0.0;
     motor->prev_dvelocity = 0.0;
     motor->target_velocity = 0.0;
 
-    // encoder param
-    motor->angle_without_track = 0.0;
-    motor->prev_angle = 0.0;
-    motor->full_ratations = 0.0;
-
-    // speed param
-    motor->prev_us = 0.0;
-    motor->prev_angle = 0.0;
-
     return motor;
-}
-
-i2c_master_dev_handle_t foc_motor_i2c_init(gpio_num_t pin_sda, gpio_num_t pin_scl, i2c_port_t port) {
-    i2c_master_dev_handle_t i2c_dev_handle;
-    i2c_master_bus_config_t bus_cfg = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = port,
-        .scl_io_num = pin_scl,
-        .sda_io_num = pin_sda,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-    };
-    i2c_master_bus_handle_t bus_handle;
-    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_cfg, &bus_handle));
-    i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = AS5600_ADDRESS,
-        .scl_speed_hz = 800*1000,
-    };
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &i2c_dev_handle));
-    gpio_set_level((gpio_num_t)pin_sda, 1);
-    gpio_set_level((gpio_num_t)pin_scl, 1);
-
-    uint8_t status = 0;
-    ESP_ERROR_CHECK(as5600_i2c_read_reg(i2c_dev_handle, AS5600_REG_STATUS, &status));
-
-    ESP_LOGI(TAG, "I2C bus initialized");
-    return i2c_dev_handle;
-    /*
-    for (int i = 0; i < 128; i += 16) {
-        for (int j = 0; j < 16; j++) {
-            int addr = i + j;
-            if (addr <= 0x03 || addr > 0x77) {
-                continue;
-            }
-            i2c_device_config_t dev_cfg = {
-                .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-                .device_address = addr,
-                .scl_speed_hz = 400*1000,
-            };
-            i2c_master_dev_handle_t dev_handle;
-            esp_err_t ret = i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle);
-            if (ret == ESP_OK) {
-                uint8_t status = 0;
-                ret = as5600_i2c_read_reg(AS5600_REG_STATUS, &status);
-                if (ret == ESP_OK) {
-                    printf("%02x: %02x\n", addr, status);
-                }
-            }
-            i2c_master_bus_rm_device(dev_handle);
-        }
-        printf("\n");
-    }
-    */
-}
-
-esp_err_t as5600_i2c_read_bytes(i2c_master_dev_handle_t i2c_dev_handle, uint8_t reg, uint8_t *data, size_t len)
-{
-    esp_err_t ret = i2c_master_transmit(i2c_dev_handle, &reg, 1, -1);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    return i2c_master_receive(i2c_dev_handle, data, len, -1);
-}
-
-esp_err_t as5600_i2c_read_reg(i2c_master_dev_handle_t i2c_dev_handle, uint8_t reg, uint8_t *data)
-{
-    esp_err_t ret = i2c_master_transmit(i2c_dev_handle, &reg, 1, -1);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    return i2c_master_receive(i2c_dev_handle, data, 1, -1);
-}
-
-esp_err_t as5600_i2c_write_bytes(i2c_master_dev_handle_t i2c_dev_handle, uint8_t reg, uint8_t *data, size_t length)
-{
-    esp_err_t ret = i2c_master_transmit(i2c_dev_handle, &reg, 1, -1);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    ret = i2c_master_transmit(i2c_dev_handle, data, length, -1);
-    
-    return ret;
-}
-
-esp_err_t as5600_i2c_write_reg(i2c_master_dev_handle_t i2c_dev_handle, uint8_t reg, uint8_t value)
-{
-    uint8_t cmd[2] = {reg, value};
-    return i2c_master_transmit(i2c_dev_handle, cmd, 2, -1);
-}
-
-esp_err_t as5600_read_raw_angle(struct Motor* motor, uint16_t *angle) {
-    uint8_t data[2] = {0};
-    esp_err_t ret = as5600_i2c_read_bytes(motor->i2c_dev_handle, AS5600_REG_RAW_ANGLE, data, 2);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    *angle = ((data[0] << 8) | data[1]) & 0x0FFF;;
-    return ESP_OK;
-}
-
-esp_err_t as5600_read_angle_without_track(struct Motor* motor, float *angle) {
-    uint16_t raw_angle = 0;
-    esp_err_t ret = as5600_read_raw_angle(motor, &raw_angle);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    // 0.087890625其实就是360/4096(as5600编码器的角度范围是0-4096，所以要先转换成角度值，然后再转换成弧度)
-    *angle = (float)raw_angle * 0.087890625 * M_PI / 180;
-    return ESP_OK;
-}
-
-esp_err_t as5600_read_angle(struct Motor* motor, float *angle) {
-    esp_err_t ret = as5600_read_angle_without_track(motor, &motor->angle_without_track);
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    float d_angle = motor->angle_without_track - motor->prev_angle_without_track;
-    // 判断圈数是否超过80%的一圈
-    if (fabs(d_angle) > (0.8f * 2 * M_PI)) {
-        motor->full_ratations += (d_angle > 0 ? -1 : 1);
-    }
-    motor->prev_angle_without_track = motor->angle_without_track;
-    *angle = (float) motor->full_ratations * 2 * M_PI + motor->angle_without_track;
-    return ESP_OK;
 }
 
 void motor_run(struct Motor* motor) {
@@ -310,23 +166,20 @@ void motor_align(struct Motor* motor) {
     for (int i = 0; i <= 500; i++) {
         float angle = _3PI_2 + _2PI * i / 500.0f;
         setTorqueSVPWM(motor, motor->voltage_limit, angle);
-        float read_angle;
-        as5600_read_angle(motor, &read_angle);
+        motor->sensor->update(motor->sensor);
         vTaskDelay(pdMS_TO_TICKS(2));
     }
-    float mid_angle;
-    as5600_read_angle(motor, &mid_angle);
+    float mid_angle = motor->sensor->read_angle(motor->sensor);
     printf("mid_angle: %f\n", mid_angle);
     for (int i = 500; i >= 0; i--) {
         float angle = _3PI_2 + _2PI * i / 500.0f;
         setTorqueSVPWM(motor, motor->voltage_limit, angle);
-        float read_angle;
-        as5600_read_angle(motor, &read_angle);
+        motor->sensor->update(motor->sensor);
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 
-    float end_angle;
-    as5600_read_angle(motor, &end_angle);
+    motor->sensor->update(motor->sensor);
+    float end_angle = motor->sensor->read_angle(motor->sensor);
     printf("end_angle: %f\n", end_angle);
     float moved = fabs(mid_angle - end_angle);
 
@@ -346,8 +199,8 @@ void motor_align(struct Motor* motor) {
 
     setTorqueSVPWM(motor, 0, _3PI_2);
     vTaskDelay(pdMS_TO_TICKS(700));
-    float angle = 0;
-    as5600_read_angle(motor, &angle);
+    motor->sensor->update(motor->sensor);
+    motor->sensor->read_angle(motor->sensor);
     motor->zero_electric_angle = 0;
     motor->zero_electric_angle = _electricalAngle(motor);
     vTaskDelay(pdMS_TO_TICKS(20));
@@ -506,7 +359,7 @@ float _normalizeAngle(float angle){
 }
 
 float _electricalAngle(struct Motor* motor) {
-    float angle = motor->angle_without_track;
+    float angle = motor->sensor->read_angle(motor->sensor);
     return _normalizeAngle((motor->direction * motor->pp) * angle) - motor->zero_electric_angle;
 }
 
@@ -612,9 +465,7 @@ float velocityOpenloop(struct Motor* motor, float target_velocity){
 
 // 闭环控制
 float positionClosedloop(struct Motor* motor, float target_angle) { 
-    float angle = 0;
-    as5600_read_angle(motor, &angle);
-    motor->shaft_angle = motor->angle_without_track;
+    float angle = motor->sensor->read_angle(motor->sensor);
 
     // show speed
     static int64_t prev_us = 0;
@@ -642,30 +493,17 @@ float positionClosedloop(struct Motor* motor, float target_angle) {
 }
 
 float velocityClosedloop(struct Motor* motor, float target_velocity) {
-    float angle = 0;
-    as5600_read_angle(motor, &angle);
-    motor->shaft_angle = motor->angle_without_track;
-
-    // 获取速度
-    int64_t cur_us = esp_timer_get_time();
-    float dt = (float)(cur_us - motor->prev_us) * 1e-6;
-    float dangle = (angle - motor->prev_angle);
-    float cur_velocity = dangle / dt;
-    motor->prev_us = cur_us;
-    motor->prev_angle = angle;
-
-    // 使用低通滤波算法获取速度
-    float TF = 0.009;
-    float alpha = TF / (TF + dt);
-    motor->velocity = motor->velocity * alpha + cur_velocity * (1 - alpha);
+    motor->sensor->update(motor->sensor);
+    float velocity = motor->sensor->read_velocity(motor->sensor);
+    float angle = motor->sensor->read_angle(motor->sensor);
 
     // 计算电流
     lowside_current_sense_read_current(motor->lowside_current_sense);
     float iq = lowside_current_sense_get_iq(motor->lowside_current_sense, _electricalAngle(motor));
 
     if (motor->cnt >= 4000) {
-        // printf("name: %s, velocity: %f, target velocity: %f\n",
-        //        motor->name, motor->velocity, target_velocity);
+        printf("name: %s, velocity: %f, target velocity: %f, angle: %f\n",
+                motor->name, velocity, target_velocity, angle);
         motor->cnt = 0;
         /*
         printf("name: %s, a: %f, b: %f, c: %f\n",
@@ -679,10 +517,11 @@ float velocityClosedloop(struct Motor* motor, float target_velocity) {
     motor->cnt++;
 
     // PI控制
-    float dvelocity = target_velocity - motor->velocity;
+    int64_t cur_us = esp_timer_get_time();
+    float dt = (float)(cur_us - motor->start_ts) * 1e-6;
+    motor->start_ts = cur_us;
+    float dvelocity = target_velocity - velocity;
     float kp = 0.003, ki = 0.002;
-    // static float integral = 0;
-    // static float prev_dvelocity = 0;
     motor->integral += (dvelocity + motor->prev_dvelocity) * 0.5 * dt;
     if (fabs(motor->integral) > 100) {
         motor->integral = motor->integral > 0 ? 100 : -100;

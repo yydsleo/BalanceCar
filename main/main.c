@@ -5,6 +5,7 @@
 #include "esp_heap_caps.h"
 #include "motor_foc.h"
 #include "esp_rom_gpio.h"
+#include "as5600.h"
 
 static const char* TAG = "main";
 struct Motor *left_motor, *right_motor;
@@ -27,20 +28,20 @@ void app_main(void)
     // adc unit
     adc_oneshot_unit_handle_t adc_handle = new_lowside_current_sense_adc_unit();
     left_motor = new_foc_motor(12, 11, 10, LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2, LEDC_TIMER_0, 7);
-    left_motor->i2c_dev_handle = foc_motor_i2c_init(8, 9, I2C_NUM_0);
+    left_motor->sensor = new_as5600(8, 9, I2C_NUM_0);
     left_motor->name = "left";
     // left_motor->lowside_current_sense = new_lowside_current_sense(2, 3, 0);
     left_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, 0.005f, 50.0f, 2, 3, 0);
     lowside_current_sense_init(left_motor->lowside_current_sense);
 
     right_motor = new_foc_motor(35, 34, 33, LEDC_CHANNEL_3, LEDC_CHANNEL_4, LEDC_CHANNEL_5, LEDC_TIMER_1, 7);
-    right_motor->i2c_dev_handle = foc_motor_i2c_init(37, 36, I2C_NUM_1);
+    right_motor->sensor = new_as5600(37, 36, I2C_NUM_1);
     right_motor->name = "right";
     right_motor->lowside_current_sense = new_lowside_current_sense(adc_handle, 0.005f, 50.0f, 4, 5, 0);
     lowside_current_sense_init(right_motor->lowside_current_sense);
 
-    left_motor->target_velocity = 50;
-    right_motor->target_velocity = 50;
+    left_motor->target_velocity = 10;
+    right_motor->target_velocity = 10;
 
     motor_align(left_motor);
     motor_align(right_motor);

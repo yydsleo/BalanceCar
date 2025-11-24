@@ -1,5 +1,7 @@
 #ifndef _MOTOR_H_
 #define _MOTOR_H_
+#include "sensor.h"
+
 #include "driver/ledc.h"
 #include "driver/gpio.h"
 #include "esp_heap_caps.h"
@@ -74,22 +76,14 @@ struct Motor {
     float dc_b;
     float dc_c;
     int direction;
-    // 电机参数
-    float velocity;
+    // 速度PID参数
     float integral;
     float prev_dvelocity;
     float target_velocity;
-    // 编码器的参数
-    float angle_without_track;
-    float prev_angle_without_track;
-    float full_ratations;
-    // 计算速度相关的参数
-    float prev_us;
-    float prev_angle;
 
     int64_t start_ts;
     // 编码器
-    i2c_master_dev_handle_t i2c_dev_handle;
+    struct Sensor* sensor;
     // 电流采样
     struct LowsideCurrentSense *lowside_current_sense;
 };
@@ -130,17 +124,6 @@ void lowside_current_sense_init(struct LowsideCurrentSense *lcs);
 void lowside_current_sense_read_voltage(struct LowsideCurrentSense *lcs);
 void lowside_current_sense_read_current(struct LowsideCurrentSense *lcs);
 float lowside_current_sense_get_iq(struct LowsideCurrentSense *lcs, float angle);
-
-
-// as5600
-i2c_master_dev_handle_t foc_motor_i2c_init(gpio_num_t pin_sda, gpio_num_t pin_scl, i2c_port_t port);
-esp_err_t as5600_i2c_read_bytes(i2c_master_dev_handle_t i2c_dev_handle, uint8_t reg, uint8_t *data, size_t len);
-esp_err_t as5600_i2c_read_reg(i2c_master_dev_handle_t i2c_dev_handle, uint8_t reg, uint8_t *data);
-esp_err_t as5600_i2c_write_bytes(i2c_master_dev_handle_t i2c_dev_handle, uint8_t reg, uint8_t *data, size_t length);
-esp_err_t as5600_i2c_write_reg(i2c_master_dev_handle_t i2c_dev_handle, uint8_t reg, uint8_t value);
-esp_err_t as5600_read_raw_angle(struct Motor* motor, uint16_t *angle);
-esp_err_t as5600_read_angle_without_track(struct Motor* motor, float *angle);
-esp_err_t as5600_read_angle(struct Motor* motor, float *angle);
 
 // foc
 #define _constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
