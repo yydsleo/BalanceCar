@@ -4,6 +4,7 @@ idf_component_register(SRCS
     "main.c"
     "motor_foc.c"
     "as5600.c"
+    "lowside_current_sense.c"
     INCLUDE_DIRS
     "."
 

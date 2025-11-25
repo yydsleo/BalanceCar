@@ -212,130 +212,7 @@ void motor_align(struct Motor* motor) {
     printf("zero angle: %f\n", motor->zero_electric_angle);
 }
 
-
-adc_channel_t get_channel_by_pin(int pin) {
-    ESP_ERROR_CHECK(!(pin >= 1 && pin <= 10));
-    adc_channel_t table[11] = {0, ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6, ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9};
-    return table[pin];
-}
-
-adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit() {
-    adc_oneshot_unit_handle_t adc_handle;
-    adc_oneshot_unit_init_cfg_t init_config1 = {
-        .unit_id = ADC_UNIT_1,          // 选择ADC单元，例如ADC_UNIT_1
-        .ulp_mode = ADC_ULP_MODE_DISABLE,
-    };
-    // 创建ADC单元句柄
-    esp_err_t ret = adc_oneshot_new_unit(&init_config1, &adc_handle);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "create adc failed!");
-        return NULL;
-    }
-
-    return adc_handle;
-}
-
-struct LowsideCurrentSense* new_lowside_current_sense(adc_oneshot_unit_handle_t adc_handle, float shunt_resistor, float gain, int pin_a, int pin_b, int pin_c) {
-    struct LowsideCurrentSense *lowside_current_sense = malloc(sizeof(struct LowsideCurrentSense));
-    if (lowside_current_sense == NULL) {
-        ESP_LOGE(TAG, "malloc memory failed!");
-        return NULL;
-    }
-
-    adc_oneshot_chan_cfg_t config = {
-        .atten = ADC_ATTEN_DB_12,   // 设置衰减，以调整测量电压范围
-        .bitwidth = ADC_BITWIDTH_DEFAULT, // 设置输出位宽
-    };
-    lowside_current_sense->adc_handle = adc_handle;
-
-    if (pin_a != 0) {
-        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, get_channel_by_pin(pin_a), &config)); // 此处以配置通道2为例
-        lowside_current_sense->channel_a = get_channel_by_pin(pin_a);
-    }
-    if (pin_b != 0) {
-        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, get_channel_by_pin(pin_b), &config)); // 此处以配置通道2为例
-        lowside_current_sense->channel_b = get_channel_by_pin(pin_b);
-    }
-    if (pin_c != 0) {
-        ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, get_channel_by_pin(pin_c), &config)); // 此处以配置通道2为例
-        lowside_current_sense->channel_c = get_channel_by_pin(pin_c);
-    }
-
-    // gain是电压放大倍数，也就是增益系数
-    // shut_resistor是采样电阻的阻值
-    // 得到电流的原理是：采样的电压/电阻
-    lowside_current_sense->shunt_resistor = shunt_resistor;
-    lowside_current_sense->gain = gain;
-
-    lowside_current_sense->gain_a = 1.0f / shunt_resistor / gain * -1;
-    lowside_current_sense->gain_b = 1.0f / shunt_resistor / gain * -1;
-    lowside_current_sense->gain_c = 1.0f / shunt_resistor / gain * -1;
-
-    // other param
-    lowside_current_sense->lowpass_filter = 0.05f;
-    lowside_current_sense->iq = 0;
-
-    return lowside_current_sense;
-}
-
-
-void lowside_current_sense_init(struct LowsideCurrentSense *lcs) {
-    int cnt = 1000;
-    float offset_ia = 0;
-    float offset_ib = 0;
-    float offset_ic = 0;
-    for (int i = 0; i < cnt; i++) {
-        lowside_current_sense_read_voltage(lcs);
-        offset_ia += lcs->voltage_a;
-        offset_ib += lcs->voltage_b;
-        offset_ic += lcs->voltage_c;
-        vTaskDelay(pdMS_TO_TICKS(1));
-    }
-    lcs->offset_a = offset_ia / cnt;
-    lcs->offset_b = offset_ib / cnt;
-    lcs->offset_c = offset_ic / cnt;
-}
-
-void lowside_current_sense_read_voltage(struct LowsideCurrentSense *lcs) {
-    int adc_raw_a, adc_raw_b;
-    ESP_ERROR_CHECK(adc_oneshot_read(lcs->adc_handle, lcs->channel_a, &adc_raw_a));
-    ESP_ERROR_CHECK(adc_oneshot_read(lcs->adc_handle, lcs->channel_b, &adc_raw_b));
-
-    lcs->adc_value_a = adc_raw_a;
-    lcs->adc_value_b = adc_raw_b;
-
-    lcs->voltage_a = (lcs->adc_value_a * 3.3) / 4095.0 - 1.65;
-    lcs->voltage_b = (lcs->adc_value_b * 3.3) / 4095.0 - 1.65;
-    lcs->voltage_c = -(lcs->voltage_a + lcs->voltage_b);
-}
-
-void lowside_current_sense_read_current(struct LowsideCurrentSense *lcs) {
-    lowside_current_sense_read_voltage(lcs);
- 
-    lcs->current_a = (lcs->voltage_a - lcs->offset_a) * lcs->gain_a;
-    lcs->current_b = (lcs->voltage_b - lcs->offset_b) * lcs->gain_b;
-    lcs->current_c = (lcs->voltage_c - lcs->offset_c) * lcs->gain_c;
-}
-
-float lowside_current_sense_get_iq(struct LowsideCurrentSense *lcs, float angle) {
-    float current_a = lcs->current_a;
-    float current_b = lcs->current_b;
-    float I_alpha = current_a;
-    float I_beta = _1_SQRT3 * current_a + _2_SQRT3 * current_b;
-    float ct = cos(angle);
-    float st = sin(angle);
-    float I_q = I_beta * ct - I_alpha * st;
-
-    // 低通滤波
-    if (lcs->lowpass_filter < 0.001f) {
-        lcs->iq = I_q;
-    } else {
-        lcs->iq = lcs->iq * (1 - lcs->lowpass_filter) + I_q * lcs->lowpass_filter;
-    }
-    return lcs->iq;
-}
 // foc
-
 void motor_set_pwm(struct Motor* motor, float ua, float ub, float uc) { 
     // printf("%f %f %f\n", ua, ub, uc);
     motor->dc_a = _constrain(ua / motor->voltage_power_supply, 0, 1);
@@ -375,6 +252,10 @@ void setPhaseVoltage(struct Motor* motor, float Uq,float Ud, float angle_el) {
     motor->Uc = (-motor->Ualpha-sqrt(3)*motor->Ubeta)/2 + motor->voltage_power_supply/2;
     motor_set_pwm(motor, motor->Ua, motor->Ub, motor->Uc);
 }
+void setTorque(struct Motor* motor, float Uq, float angle_el) {
+    setPhaseVoltage(motor, Uq, 0, angle_el);
+}
+
 
 void setTorqueSVPWM(struct Motor* motor, float Uq, float angle_el) {
     if (Uq < 0)
@@ -435,21 +316,6 @@ void setTorqueSVPWM(struct Motor* motor, float Uq, float angle_el) {
     motor_set_pwm(motor, motor->Ua, motor->Ub, motor->Uc);
 }
 
-void setTorque(struct Motor* motor, float Uq, float angle_el) {
-    Uq = _constrain(Uq, -motor->voltage_power_supply/2, motor->voltage_power_supply/2);
-    // float Ud = 0;
-    angle_el = _normalizeAngle(angle_el);
-    // 帕克逆变换
-    motor->Ualpha = -Uq*sin(angle_el); 
-    motor->Ubeta = Uq*cos(angle_el); 
-
-    // 克拉克逆变换
-    motor->Ua = motor->Ualpha + motor->voltage_power_supply/2;
-    motor->Ub = (sqrt(3)*motor->Ubeta-motor->Ualpha)/2 + motor->voltage_power_supply/2;
-    motor->Uc = (-motor->Ualpha-sqrt(3)*motor->Ubeta)/2 + motor->voltage_power_supply/2;
-    motor_set_pwm(motor, motor->Ua, motor->Ub, motor->Uc);
-}
-
 // 开环控制
 float velocityOpenloop(struct Motor* motor, float target_velocity){
     int64_t now_us = esp_timer_get_time();
@@ -498,8 +364,7 @@ float velocityClosedloop(struct Motor* motor, float target_velocity) {
     float angle = motor->sensor->read_angle(motor->sensor);
 
     // 计算电流
-    lowside_current_sense_read_current(motor->lowside_current_sense);
-    float iq = lowside_current_sense_get_iq(motor->lowside_current_sense, _electricalAngle(motor));
+    float iq = motor->current_sense->get_foc_current(motor->current_sense, angle);
 
     if (motor->cnt >= 4000) {
         printf("name: %s, velocity: %f, target velocity: %f, angle: %f\n",
