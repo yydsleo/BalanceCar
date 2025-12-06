@@ -542,7 +542,7 @@ float velocityClosedloop(struct Motor* motor, float target_velocity) {
         printf("name: %s, velocity: %f, target velocity: %f, angle: %f, electricalAngle: %f\n",
                 motor->name, velocity, target_velocity, angle, _electricalAngle(motor));
         */
-        printf("name :%s, iq: %f\n", motor->name, iq);
+        // printf("name :%s, iq: %f\n", motor->name, iq);
 
         motor->cnt = 0;
         /*

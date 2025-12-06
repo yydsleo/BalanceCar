@@ -15,7 +15,7 @@ void foc_driver() {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         left_motor->run(left_motor);
-        right_motor->run(right_motor);
+        // right_motor->run(right_motor);
     }
 }
 
@@ -36,6 +36,7 @@ void app_main(void)
     left_motor->current_sense->init(left_motor->current_sense);
     left_motor->init(left_motor);
 
+    /*
     right_motor = new_foc_motor(35, 34, 33, 1, 7);
     right_motor->sensor = new_as5600(37, 36, I2C_NUM_1);
     right_motor->name = "right";
@@ -44,9 +45,10 @@ void app_main(void)
     motor_set_pwm(right_motor, right_motor->voltage_power_supply / 2, right_motor->voltage_power_supply / 2, right_motor->voltage_power_supply / 2);
     right_motor->current_sense->init(right_motor->current_sense);
     right_motor->init(right_motor);
+    */
 
     left_motor->target_velocity = 10;
-    right_motor->target_velocity = 10;
+    // right_motor->target_velocity = 10;
 
     xTaskCreatePinnedToCore(&foc_driver, "foc_driver", 4 * 1024, NULL, 5, &foc_driver_task_handle, 1);
 

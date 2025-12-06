@@ -1,6 +1,8 @@
 #include "current_sense.h"
 #include "lowside_current_sense.h"
 
+#include <soc/soc.h>
+#include <register/soc/sens_reg.h>
 #include <../src/mcpwm_private.h>
 #include <driver/mcpwm_prelude.h>
 #include <freertos/FreeRTOS.h>
@@ -30,20 +32,48 @@ adc_channel_t get_channel_by_pin(int pin) {
     return table[pin];
 }
 
+float IRAM_ATTR adcRead2(uint8_t channel) {
+    uint16_t value = 0;
+
+    return (float)value;
+}
+
+float IRAM_ATTR adcRead(uint8_t channel)
+{
+    CLEAR_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_START_SAR_M);
+    SET_PERI_REG_BITS(SENS_SAR_MEAS1_CTRL2_REG, SENS_SAR1_EN_PAD, (1 << channel), SENS_SAR1_EN_PAD_S);
+    SET_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_START_SAR_M);
+    uint16_t value = 0;
+
+    //wait for conversion
+    while (GET_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_DONE_SAR) == 0);
+    // read teh value
+    value = GET_PERI_REG_BITS2(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_DATA_SAR, SENS_MEAS1_DATA_SAR_S);
+    return (float)value;
+}
+
+uint64_t prev_us = 0;
+uint64_t cnt = 0;
 // 电流采样回调函数（中断上下文内，需遵循IRAM_ATTR等规则）
 static bool IRAM_ATTR on_timer_event_cb(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t *edata, void *user_data) {
     // 检查是否是定时器达到峰值（TEP）的事件
     struct LowsideCurrentSense *current_sense = (struct LowsideCurrentSense *)user_data;
-    if (++current_sense->adc_task_cnt < 80) {
-        return true;
+
+    cnt++;
+    if (++current_sense->adc_task_cnt < 25000) {
+        // return true;
     }
     current_sense->adc_task_cnt = 0;
-    // xTaskNotifyGive(current_sense->adc_task_handle);
+
+    current_sense->adc_value_a = adcRead(3);
+    current_sense->adc_value_b = adcRead(4);
+    /*
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     vTaskNotifyGiveFromISR(current_sense->adc_task_handle, &xHigherPriorityTaskWoken);
     if (xHigherPriorityTaskWoken == pdTRUE) {
         portYIELD_FROM_ISR();
     }
+    */
     return true; // 返回值含义需查阅文档，通常false表示未占用更高优先级任务
 }
 
@@ -52,6 +82,8 @@ void adc_task(void *params) {
     while (true) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         lowside_current_sense_read_voltage(current_sense);
+        printf("cnt: %lld\n", cnt);
+        cnt = 0;
         // vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
@@ -159,21 +191,17 @@ void lowside_current_sense_read_voltage(struct LowsideCurrentSense *lcs) {
         ESP_LOGE(TAG, "adc_oneshot_read b failed!");
         return;
     }
-
     lcs->adc_value_a = adc_raw_a;
     lcs->adc_value_b = adc_raw_b;
-
-    // lcs->voltage_a = (lcs->adc_value_a * 3.3) / 4095.0 - 1.65;
-    // lcs->voltage_b = (lcs->adc_value_b * 3.3) / 4095.0 - 1.65;
-    lcs->voltage_a = (lcs->adc_value_a * 3.3) / 4095.0;
-    lcs->voltage_b = (lcs->adc_value_b * 3.3) / 4095.0;
-
-    lcs->voltage_c = -(lcs->voltage_a + lcs->voltage_b);
 }
 
 struct PhaseCurrent read_current(struct CurrentSense *current_sense) {
-    // lowside_current_sense_read_voltage(current_sense->current_sense);
     struct LowsideCurrentSense *lcs = current_sense->current_sense;
+    // lowside_current_sense_read_voltage(current_sense->current_sense);
+    lcs->voltage_a = (lcs->adc_value_a * 3.3) / 4095.0;
+    lcs->voltage_b = (lcs->adc_value_b * 3.3) / 4095.0;
+    // lcs->voltage_c = -(lcs->voltage_a + lcs->voltage_b);
+    lcs->voltage_c = 0;
 
     lcs->current_a = (lcs->voltage_a - lcs->offset_a) * lcs->gain_a * -1;
     lcs->current_b = (lcs->voltage_b - lcs->offset_b) * lcs->gain_b * -1;
