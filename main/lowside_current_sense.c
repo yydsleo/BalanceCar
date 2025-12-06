@@ -56,8 +56,8 @@ struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain,
     }
 
     adc_oneshot_chan_cfg_t config = {
-        .atten = ADC_ATTEN_DB_12,   // 设置衰减，以调整测量电压范围
-        .bitwidth = ADC_BITWIDTH_DEFAULT, // 设置输出位宽
+        .atten = ADC_ATTEN_DB_11,   // 设置衰减，以调整测量电压范围
+        .bitwidth = ADC_BITWIDTH_12, // 设置输出位宽
     };
     adc_oneshot_unit_handle_t adc_handle = new_lowside_current_sense_adc_unit();
     lowside_current_sense->adc_handle = adc_handle;
@@ -86,7 +86,7 @@ struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain,
     lowside_current_sense->gain_c = 1.0f / shunt_resistor / gain * -1;
     // 低通滤波
     lowside_current_sense->foc_current = 0.0f;
-    lowside_current_sense->foc_lowpass_filter = 0.002f;
+    lowside_current_sense->foc_lowpass_filter = 0.0f;
 
     struct CurrentSense *current_sense = emalloc(sizeof(struct CurrentSense));
     current_sense->current_sense = lowside_current_sense;
@@ -116,9 +116,9 @@ struct PhaseCurrent read_current(struct CurrentSense *current_sense) {
     lowside_current_sense_read_voltage(current_sense->current_sense);
     struct LowsideCurrentSense *lcs = current_sense->current_sense;
 
-    lcs->current_a = (lcs->voltage_a - lcs->offset_a) * lcs->gain_a;
-    lcs->current_b = (lcs->voltage_b - lcs->offset_b) * lcs->gain_b;
-    lcs->current_c = (lcs->voltage_c - lcs->offset_c) * lcs->gain_c;
+    lcs->current_a = (lcs->voltage_a - lcs->offset_a) * lcs->gain_a * -1;
+    lcs->current_b = (lcs->voltage_b - lcs->offset_b) * lcs->gain_b * -1;
+    lcs->current_c = (lcs->voltage_c - lcs->offset_c) * lcs->gain_c * -1;
 
     struct PhaseCurrent current;
     current.a = lcs->current_a;
@@ -143,6 +143,7 @@ void init(struct CurrentSense *current_sense) {
     lcs->offset_a = offset_ia / cnt;
     lcs->offset_b = offset_ib / cnt;
     lcs->offset_c = offset_ic / cnt;
+    printf("lcs offset_a: %f, offset_b: %f, offset_c: %f\n", lcs->offset_a, lcs->offset_b, lcs->offset_c);
 }
 
 float get_foc_current(struct CurrentSense *current_sense, float angle) {

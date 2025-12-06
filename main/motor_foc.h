@@ -12,6 +12,9 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
+// #include <driver/mcpwm.h>
+// #include <driver/mcpwm_types_legacy.h>
+#include <driver/mcpwm_prelude.h>
 
 #define emalloc(size) malloc(size)
 
@@ -28,6 +31,21 @@ struct Motor {
     ledc_channel_t channel1;
     ledc_channel_t channel2;
     ledc_channel_t channel3;
+
+    int mcpwm_unit;
+    mcpwm_timer_handle_t mcpwm_timer_1;
+    mcpwm_timer_handle_t mcpwm_timer_2;
+    mcpwm_timer_handle_t mcpwm_timer_3;
+    mcpwm_oper_handle_t mcpwm_operator_1;
+    mcpwm_oper_handle_t mcpwm_operator_2;
+    mcpwm_oper_handle_t mcpwm_operator_3;
+    mcpwm_cmpr_handle_t mcpwm_comparator_1;
+    mcpwm_cmpr_handle_t mcpwm_comparator_2;
+    mcpwm_cmpr_handle_t mcpwm_comparator_3;
+    mcpwm_gen_handle_t mcpwm_generator_1;
+    mcpwm_gen_handle_t mcpwm_generator_2;
+    mcpwm_gen_handle_t mcpwm_generator_3;
+
     int loop;
     int cnt;
 
@@ -57,18 +75,15 @@ struct Motor {
     struct Sensor* sensor;
     // 电流采样
     struct CurrentSense *current_sense;
+
+    void (*init)(struct Motor* motor);
+    void (*run)(struct Motor* motor);
 };
 
 void foc_init();
-struct Motor* new_foc_motor(gpio_num_t pin_pwm1, gpio_num_t pin_pwm2, gpio_num_t pin_pwm3,
-                        ledc_channel_t channel1,
-                        ledc_channel_t channel2,
-                        ledc_channel_t channel3,
-                        ledc_timer_t timer,
+struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t pin_in3,
+                        int mcpwm_unit,
                         int pp);
-
-void motor_run(struct Motor* motor);
-void motor_align(struct Motor* motor);
 
 // foc
 #define _constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
