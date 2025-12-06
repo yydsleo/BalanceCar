@@ -192,8 +192,8 @@ struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t p
     };
     printf("period_ticks: %d\n", (int)PERIOD_TICKS);
     mcpwm_new_timer(&timer_config, &motor->mcpwm_timer_1);
-    mcpwm_new_timer(&timer_config, &motor->mcpwm_timer_2);
-    mcpwm_new_timer(&timer_config, &motor->mcpwm_timer_3);
+    // mcpwm_new_timer(&timer_config, &motor->mcpwm_timer_2);
+    // mcpwm_new_timer(&timer_config, &motor->mcpwm_timer_3);
     // 安装操作器
     mcpwm_operator_config_t operator_config = {
         .group_id = mcpwm_unit,
@@ -204,9 +204,9 @@ struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t p
     mcpwm_new_operator(&operator_config, &motor->mcpwm_operator_1);
     mcpwm_operator_connect_timer(motor->mcpwm_operator_1, motor->mcpwm_timer_1);
     mcpwm_new_operator(&operator_config, &motor->mcpwm_operator_2);
-    mcpwm_operator_connect_timer(motor->mcpwm_operator_2, motor->mcpwm_timer_2);
+    mcpwm_operator_connect_timer(motor->mcpwm_operator_2, motor->mcpwm_timer_1);
     mcpwm_new_operator(&operator_config, &motor->mcpwm_operator_3);
-    mcpwm_operator_connect_timer(motor->mcpwm_operator_3, motor->mcpwm_timer_3);
+    mcpwm_operator_connect_timer(motor->mcpwm_operator_3, motor->mcpwm_timer_1);
     // 比较器
     mcpwm_comparator_config_t cmp_config = {
         .intr_priority = 0,
@@ -231,12 +231,11 @@ struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t p
                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, motor->mcpwm_comparator_1, MCPWM_GEN_ACTION_LOW),
                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, motor->mcpwm_comparator_1, MCPWM_GEN_ACTION_HIGH),
                 MCPWM_GEN_COMPARE_EVENT_ACTION_END());
-   
+/*
     mcpwm_generator_set_action_on_timer_event(motor->mcpwm_generator_1,
                 MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP,
                                              MCPWM_TIMER_EVENT_EMPTY,
                                              MCPWM_GEN_ACTION_HIGH));
-/*
     mcpwm_generator_set_action_on_compare_event(motor->mcpwm_generator_1,
                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP,
                                              motor->mcpwm_comparator_1,
@@ -248,11 +247,11 @@ struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t p
                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, motor->mcpwm_comparator_2, MCPWM_GEN_ACTION_LOW),
                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, motor->mcpwm_comparator_2, MCPWM_GEN_ACTION_HIGH),
                 MCPWM_GEN_COMPARE_EVENT_ACTION_END());
+    /*
     mcpwm_generator_set_action_on_timer_event(motor->mcpwm_generator_2,
                 MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP,
                                              MCPWM_TIMER_EVENT_EMPTY,
                                              MCPWM_GEN_ACTION_HIGH));
-    /*
     mcpwm_generator_set_action_on_compare_event(motor->mcpwm_generator_2,
                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP,
                                              motor->mcpwm_comparator_2,
@@ -263,11 +262,11 @@ struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t p
                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP, motor->mcpwm_comparator_3, MCPWM_GEN_ACTION_LOW),
                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_DOWN, motor->mcpwm_comparator_3, MCPWM_GEN_ACTION_HIGH),
                 MCPWM_GEN_COMPARE_EVENT_ACTION_END());
+    /*
     mcpwm_generator_set_action_on_timer_event(motor->mcpwm_generator_3,
                 MCPWM_GEN_TIMER_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP,
                                              MCPWM_TIMER_EVENT_EMPTY,
                                              MCPWM_GEN_ACTION_HIGH));
-    /*
     mcpwm_generator_set_action_on_compare_event(motor->mcpwm_generator_3,
                 MCPWM_GEN_COMPARE_EVENT_ACTION(MCPWM_TIMER_DIRECTION_UP,
                                              motor->mcpwm_comparator_3,
@@ -277,17 +276,17 @@ struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t p
     // 启动定时器
     ret = mcpwm_timer_enable(motor->mcpwm_timer_1);
     ESP_ERROR_CHECK(ret);
-    ret = mcpwm_timer_enable(motor->mcpwm_timer_2);
-    ESP_ERROR_CHECK(ret);
-    ret = mcpwm_timer_enable(motor->mcpwm_timer_3);
-    ESP_ERROR_CHECK(ret);
+    // ret = mcpwm_timer_enable(motor->mcpwm_timer_2);
+    // ESP_ERROR_CHECK(ret);
+    // ret = mcpwm_timer_enable(motor->mcpwm_timer_3);
+    // ESP_ERROR_CHECK(ret);
     // ret = mcpwm_timer_start_stop(motor->mcpwm_timer_1, MCPWM_TIMER_START_NO_STOP);
     ret = mcpwm_timer_start_stop(motor->mcpwm_timer_1, MCPWM_TIMER_START_NO_STOP);
     ESP_ERROR_CHECK(ret);
-    ret = mcpwm_timer_start_stop(motor->mcpwm_timer_2, MCPWM_TIMER_START_NO_STOP);
-    ESP_ERROR_CHECK(ret);
-    ret = mcpwm_timer_start_stop(motor->mcpwm_timer_3, MCPWM_TIMER_START_NO_STOP);
-    ESP_ERROR_CHECK(ret);
+    // ret = mcpwm_timer_start_stop(motor->mcpwm_timer_2, MCPWM_TIMER_START_NO_STOP);
+    // ESP_ERROR_CHECK(ret);
+    // ret = mcpwm_timer_start_stop(motor->mcpwm_timer_3, MCPWM_TIMER_START_NO_STOP);
+    // ESP_ERROR_CHECK(ret);
 
     // init foc param
     motor->voltage_power_supply = 8.2;
@@ -543,7 +542,7 @@ float velocityClosedloop(struct Motor* motor, float target_velocity) {
         printf("name: %s, velocity: %f, target velocity: %f, angle: %f, electricalAngle: %f\n",
                 motor->name, velocity, target_velocity, angle, _electricalAngle(motor));
         */
-        // printf("name :%s, iq: %f\n", motor->name, iq);
+        printf("name :%s, iq: %f\n", motor->name, iq);
 
         motor->cnt = 0;
         /*

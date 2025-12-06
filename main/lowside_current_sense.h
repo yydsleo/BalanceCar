@@ -1,9 +1,12 @@
 #ifndef _LOWSIDE_CURRENT_SENSE_H_
 #define _LOWSIDE_CURRENT_SENSE_H_ 
-
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
+#include <driver/mcpwm_prelude.h>
+
 
 struct LowsideCurrentSense {
     adc_oneshot_unit_handle_t adc_handle;
@@ -21,6 +24,8 @@ struct LowsideCurrentSense {
     float current_a;
     float current_b;
     float current_c;
+    TaskHandle_t adc_task_handle;
+    int adc_task_cnt;
 
     float offset_a;
     float offset_b;
@@ -54,6 +59,6 @@ GPIO 12	ADC2	CH1	可能与Wi-Fi冲突
 GPIO 13	ADC2	CH2	可能与Wi-Fi冲突
 GPIO 14	ADC2	CH3	可能与Wi-Fi冲突
 */
-struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain, int pin_a, int pin_b, int pin_c);
+struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain, int pin_a, int pin_b, int pin_c, mcpwm_timer_handle_t timer);
 
 #endif

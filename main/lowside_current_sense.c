@@ -1,11 +1,14 @@
 #include "current_sense.h"
 #include "lowside_current_sense.h"
 
+#include <../src/mcpwm_private.h>
+#include <driver/mcpwm_prelude.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <math.h>
+#include <string.h>
 
 static char *TAG = "LCS";
 
@@ -25,6 +28,32 @@ adc_channel_t get_channel_by_pin(int pin) {
     ESP_ERROR_CHECK(!(pin >= 1 && pin <= 10));
     adc_channel_t table[11] = {0, ADC_CHANNEL_0, ADC_CHANNEL_1, ADC_CHANNEL_2, ADC_CHANNEL_3, ADC_CHANNEL_4, ADC_CHANNEL_5, ADC_CHANNEL_6, ADC_CHANNEL_7, ADC_CHANNEL_8, ADC_CHANNEL_9};
     return table[pin];
+}
+
+// 电流采样回调函数（中断上下文内，需遵循IRAM_ATTR等规则）
+static bool IRAM_ATTR on_timer_event_cb(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t *edata, void *user_data) {
+    // 检查是否是定时器达到峰值（TEP）的事件
+    struct LowsideCurrentSense *current_sense = (struct LowsideCurrentSense *)user_data;
+    if (++current_sense->adc_task_cnt < 80) {
+        return true;
+    }
+    current_sense->adc_task_cnt = 0;
+    // xTaskNotifyGive(current_sense->adc_task_handle);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    vTaskNotifyGiveFromISR(current_sense->adc_task_handle, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken == pdTRUE) {
+        portYIELD_FROM_ISR();
+    }
+    return true; // 返回值含义需查阅文档，通常false表示未占用更高优先级任务
+}
+
+void adc_task(void *params) {
+    struct LowsideCurrentSense *current_sense = (struct LowsideCurrentSense *)params;
+    while (true) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        lowside_current_sense_read_voltage(current_sense);
+        // vTaskDelay(pdMS_TO_TICKS(1));
+    }
 }
 
 adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit() {
@@ -48,12 +77,13 @@ adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit() {
     return adc_handle;
 }
 
-struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain, int pin_a, int pin_b, int pin_c) {
+struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain, int pin_a, int pin_b, int pin_c, mcpwm_timer_handle_t timer) {
     struct LowsideCurrentSense *lowside_current_sense = emalloc(sizeof(struct LowsideCurrentSense));
     if (lowside_current_sense == NULL) {
         ESP_LOGE(TAG, "malloc memory failed!");
         return NULL;
     }
+    memset(lowside_current_sense, 0, sizeof(struct LowsideCurrentSense));
 
     adc_oneshot_chan_cfg_t config = {
         .atten = ADC_ATTEN_DB_11,   // 设置衰减，以调整测量电压范围
@@ -88,18 +118,47 @@ struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain,
     lowside_current_sense->foc_current = 0.0f;
     lowside_current_sense->foc_lowpass_filter = 0.0f;
 
+    lowside_current_sense->adc_task_cnt = 0;
+    // 创建电流采样的task
+    char buf[32];
+    snprintf(buf, sizeof(buf), "adc_task_%d", rand() % 100);
+    xTaskCreatePinnedToCore(&adc_task, buf, 4 * 1024, lowside_current_sense, 5, &lowside_current_sense->adc_task_handle, 1);
+    // 注册电流传感器的回调
+    mcpwm_timer_event_callbacks_t cbs = {
+        .on_full = on_timer_event_cb,
+        .on_empty = NULL,
+        .on_stop = NULL,
+    };
+    struct mcpwm_timer_t *t = (struct mcpwm_timer_t*)timer;
+    t->fsm = MCPWM_TIMER_FSM_INIT;
+    mcpwm_timer_register_event_callbacks(t, &cbs, lowside_current_sense);
+    t->fsm = MCPWM_TIMER_FSM_ENABLE;
+    esp_intr_enable(t->intr);
+
+
     struct CurrentSense *current_sense = emalloc(sizeof(struct CurrentSense));
     current_sense->current_sense = lowside_current_sense;
     current_sense->read_current = read_current;
     current_sense->init = init;
     current_sense->get_foc_current = get_foc_current;
+    vTaskDelay(pdMS_TO_TICKS(100));
     return current_sense;
 }
 
 void lowside_current_sense_read_voltage(struct LowsideCurrentSense *lcs) {
-    int adc_raw_a, adc_raw_b;
-    ESP_ERROR_CHECK(adc_oneshot_read(lcs->adc_handle, lcs->channel_a, &adc_raw_a));
-    ESP_ERROR_CHECK(adc_oneshot_read(lcs->adc_handle, lcs->channel_b, &adc_raw_b));
+    int adc_raw_a = 0, adc_raw_b = 0;
+    // ESP_ERROR_CHECK(adc_oneshot_read(lcs->adc_handle, lcs->channel_a, &adc_raw_a));
+    // ESP_ERROR_CHECK(adc_oneshot_read(lcs->adc_handle, lcs->channel_b, &adc_raw_b));
+    esp_err_t ret = adc_oneshot_read(lcs->adc_handle, lcs->channel_a, &adc_raw_a);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "adc_oneshot_read a failed!");
+        return;
+    }
+    ret = adc_oneshot_read(lcs->adc_handle, lcs->channel_b, &adc_raw_b);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "adc_oneshot_read b failed!");
+        return;
+    }
 
     lcs->adc_value_a = adc_raw_a;
     lcs->adc_value_b = adc_raw_b;
@@ -113,7 +172,7 @@ void lowside_current_sense_read_voltage(struct LowsideCurrentSense *lcs) {
 }
 
 struct PhaseCurrent read_current(struct CurrentSense *current_sense) {
-    lowside_current_sense_read_voltage(current_sense->current_sense);
+    // lowside_current_sense_read_voltage(current_sense->current_sense);
     struct LowsideCurrentSense *lcs = current_sense->current_sense;
 
     lcs->current_a = (lcs->voltage_a - lcs->offset_a) * lcs->gain_a * -1;
@@ -129,12 +188,12 @@ struct PhaseCurrent read_current(struct CurrentSense *current_sense) {
 
 void init(struct CurrentSense *current_sense) {
     struct LowsideCurrentSense *lcs = current_sense->current_sense;
-    int cnt = 1000;
+    int cnt = 2000;
     float offset_ia = 0;
     float offset_ib = 0;
     float offset_ic = 0;
     for (int i = 0; i < cnt; i++) {
-        lowside_current_sense_read_voltage(lcs);
+        // lowside_current_sense_read_voltage(lcs);
         offset_ia += lcs->voltage_a;
         offset_ib += lcs->voltage_b;
         offset_ic += lcs->voltage_c;
