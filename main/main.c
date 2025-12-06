@@ -30,7 +30,7 @@ void app_main(void)
     left_motor = new_foc_motor(12, 11, 10, 0, 7);
     left_motor->sensor = new_as5600(8, 9, I2C_NUM_0);
     left_motor->name = "left";
-    left_motor->current_sense = new_lowside_current_sense(0.005f, 50.0f, 4, 5, 0);
+    left_motor->current_sense = new_lowside_current_sense(0.005f, 50.0f, 4, 5, 0, left_motor->mcpwm_timer_1);
     // 电流环初始化之前必须要这样
     motor_set_pwm(left_motor, left_motor->voltage_power_supply / 2, left_motor->voltage_power_supply / 2, left_motor->voltage_power_supply / 2);
     left_motor->current_sense->init(left_motor->current_sense);
@@ -39,14 +39,14 @@ void app_main(void)
     right_motor = new_foc_motor(35, 34, 33, 1, 7);
     right_motor->sensor = new_as5600(37, 36, I2C_NUM_1);
     right_motor->name = "right";
-    right_motor->current_sense = new_lowside_current_sense(0.005f, 50.0f, 2, 3, 0);
+    right_motor->current_sense = new_lowside_current_sense(0.005f, 50.0f, 2, 3, 0, right_motor->mcpwm_timer_1);
     // 电流环初始化之前必须要这样
     motor_set_pwm(right_motor, right_motor->voltage_power_supply / 2, right_motor->voltage_power_supply / 2, right_motor->voltage_power_supply / 2);
     right_motor->current_sense->init(right_motor->current_sense);
     right_motor->init(right_motor);
 
-    left_motor->target_velocity = 20;
-    right_motor->target_velocity = -20;
+    left_motor->target_velocity = 10;
+    right_motor->target_velocity = 10;
 
     xTaskCreatePinnedToCore(&foc_driver, "foc_driver", 4 * 1024, NULL, 5, &foc_driver_task_handle, 1);
 
