@@ -15,9 +15,9 @@ struct LowsideCurrentSense {
     adc_channel_t channel_b;
     adc_channel_t channel_c;
 
-    float adc_value_a;
-    float adc_value_b;
-    float adc_value_c;
+    uint16_t adc_value_a;
+    uint16_t adc_value_b;
+    uint16_t adc_value_c;
     float voltage_a;
     float voltage_b;
     float voltage_c;
@@ -25,7 +25,6 @@ struct LowsideCurrentSense {
     float current_b;
     float current_c;
     TaskHandle_t adc_task_handle;
-    int adc_task_cnt;
 
     float offset_a;
     float offset_b;

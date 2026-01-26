@@ -6,6 +6,7 @@
 #include "motor_foc.h"
 #include "esp_rom_gpio.h"
 #include "as5600.h"
+#include "esp_task_wdt.h"
 #include "lowside_current_sense.h"
 
 static const char* TAG = "main";
@@ -47,7 +48,7 @@ void app_main(void)
     right_motor->init(right_motor);
     */
 
-    left_motor->target_velocity = 10;
+    left_motor->target_velocity = 50;
     // right_motor->target_velocity = 10;
 
     xTaskCreatePinnedToCore(&foc_driver, "foc_driver", 4 * 1024, NULL, 5, &foc_driver_task_handle, 1);

@@ -9,5 +9,5 @@ idf_component_register(SRCS
     "."
 
     PRIV_REQUIRES nvs_flash esp_psram esp_timer
-    REQUIRES esp_adc
+    REQUIRES esp_system esp_adc 
     )

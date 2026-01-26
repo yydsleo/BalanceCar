@@ -528,13 +528,15 @@ float velocityClosedloop(struct Motor* motor, float target_velocity) {
     motor->sensor->update(motor->sensor);
     float velocity = motor->sensor->read_velocity(motor->sensor);
     float angle = motor->sensor->read_angle(motor->sensor);
-    float iq = motor->current_sense->get_foc_current(motor->current_sense, _electricalAngle(motor));
+    // float iq = motor->current_sense->get_foc_current(motor->current_sense, _electricalAngle(motor));
 
     // 计算电流
 
     if (motor->cnt >= 1000) {
+        float iq = motor->current_sense->get_foc_current(motor->current_sense, _electricalAngle(motor));
+        printf("iq: %f\n", iq);
         // struct PhaseCurrent current = motor->current_sense->read_current(motor->current_sense);
-        struct LowsideCurrentSense *lcs = motor->current_sense->current_sense;
+        // struct LowsideCurrentSense *lcs = motor->current_sense->current_sense;
         /*
         printf("name: %s, gan_a: %f, b: %f, c: %f\n", motor->name, lcs->gain_a, lcs->gain_b, lcs->gain_c);
         printf("name: %s, a: %f, b: %f, c: %f\n", motor->name, lcs->current_a, lcs->current_b, lcs->current_c);

@@ -1,8 +1,9 @@
 #include "current_sense.h"
 #include "lowside_current_sense.h"
 
-#include <soc/soc.h>
 #include <register/soc/sens_reg.h>
+#include <soc/sens_reg.h>
+#include <soc/soc.h>
 #include <../src/mcpwm_private.h>
 #include <driver/mcpwm_prelude.h>
 #include <freertos/FreeRTOS.h>
@@ -32,41 +33,122 @@ adc_channel_t get_channel_by_pin(int pin) {
     return table[pin];
 }
 
-float IRAM_ATTR adcRead2(uint8_t channel) {
-    uint16_t value = 0;
+static uint8_t __analogAttenuation = 3;
+static uint8_t __analogWidth = 3;//12 bits
+static uint8_t __analogCycles = 8;
+static uint8_t __analogSamples = 0;
+static uint8_t __analogClockDiv = 1;
+static uint8_t __analogReturnedWidth = 12;
 
-    return (float)value;
-}
-
-float IRAM_ATTR adcRead(uint8_t channel)
+void __analogSetAttenuation(uint8_t attenuation)
 {
-    CLEAR_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_START_SAR_M);
-    SET_PERI_REG_BITS(SENS_SAR_MEAS1_CTRL2_REG, SENS_SAR1_EN_PAD, (1 << channel), SENS_SAR1_EN_PAD_S);
-    SET_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_START_SAR_M);
-    uint16_t value = 0;
-
-    //wait for conversion
-    while (GET_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_DONE_SAR) == 0);
-    // read teh value
-    value = GET_PERI_REG_BITS2(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_DATA_SAR, SENS_MEAS1_DATA_SAR_S);
-    return (float)value;
+    __analogAttenuation = attenuation & 3;
+    uint32_t att_data = 0;
+    int i = 10;
+    while(i--){
+        att_data |= __analogAttenuation << (i * 2);
+    }
+    WRITE_PERI_REG(SENS_SAR_ATTEN1_REG, att_data & 0xFFFF);//ADC1 has 8 channels
+    WRITE_PERI_REG(SENS_SAR_ATTEN2_REG, att_data);
 }
 
-uint64_t prev_us = 0;
-uint64_t cnt = 0;
+void __analogSetSamples(uint8_t samples){
+    if(!samples){
+        return;
+    }
+    __analogSamples = samples - 1;
+    SET_PERI_REG_BITS(SENS_SAR_READER1_CTRL_REG, SENS_SAR1_SAMPLE_NUM, __analogSamples, SENS_SAR1_SAMPLE_NUM_S);
+    SET_PERI_REG_BITS(SENS_SAR_READER2_CTRL_REG, SENS_SAR2_SAMPLE_NUM, __analogSamples, SENS_SAR2_SAMPLE_NUM_S);
+}
+
+void __analogSetClockDiv(uint8_t clockDiv){
+    if(!clockDiv){
+        return;
+    }
+    __analogClockDiv = clockDiv;
+    SET_PERI_REG_BITS(SENS_SAR_READER1_CTRL_REG, SENS_SAR1_CLK_DIV, __analogClockDiv, SENS_SAR1_CLK_DIV_S);
+    SET_PERI_REG_BITS(SENS_SAR_READER2_CTRL_REG, SENS_SAR2_CLK_DIV, __analogClockDiv, SENS_SAR2_CLK_DIV_S);
+}
+
+void IRAM_ATTR __analogInit(){
+    static bool initialized = false;
+    if(initialized){
+        return;
+    }
+
+    __analogSetAttenuation(3);
+    __analogSetSamples(1);//in samples
+    __analogSetClockDiv(1);
+    // __analogSetWidth(3 + 9);//in bits
+
+    SET_PERI_REG_MASK(SENS_SAR_READER1_CTRL_REG, SENS_SAR1_DATA_INV);
+    SET_PERI_REG_MASK(SENS_SAR_READER2_CTRL_REG, SENS_SAR2_DATA_INV);
+
+    SET_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_START_FORCE_M); //SAR ADC1 controller (in RTC) is started by SW
+    SET_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_SAR1_EN_PAD_FORCE_M); //SAR ADC1 pad enable bitmap is controlled by SW
+    SET_PERI_REG_MASK(SENS_SAR_MEAS2_CTRL2_REG, SENS_MEAS2_START_FORCE_M); //SAR ADC2 controller (in RTC) is started by SW
+    SET_PERI_REG_MASK(SENS_SAR_MEAS2_CTRL2_REG, SENS_SAR2_EN_PAD_FORCE_M); //SAR ADC2 pad enable bitmap is controlled by SW
+
+    CLEAR_PERI_REG_MASK(SENS_SAR_POWER_XPD_SAR_REG, SENS_FORCE_XPD_SAR_M); //force XPD_SAR=0, use XPD_FSM
+    SET_PERI_REG_BITS(SENS_SAR_POWER_XPD_SAR_REG, SENS_FORCE_XPD_AMP, 0x2, SENS_FORCE_XPD_AMP_S); //force XPD_AMP=0
+
+    CLEAR_PERI_REG_MASK(SENS_SAR_AMP_CTRL3_REG, 0xfff << SENS_AMP_RST_FB_FSM_S);  //clear FSM
+    SET_PERI_REG_BITS(SENS_SAR_AMP_CTRL1_REG, SENS_SAR_AMP_WAIT1, 0x1, SENS_SAR_AMP_WAIT1_S);
+    SET_PERI_REG_BITS(SENS_SAR_AMP_CTRL1_REG, SENS_SAR_AMP_WAIT2, 0x1, SENS_SAR_AMP_WAIT2_S);
+    SET_PERI_REG_BITS(SENS_SAR_POWER_XPD_SAR_REG, SENS_SAR_AMP_WAIT3, 0x1, SENS_SAR_AMP_WAIT3_S);
+    while (GET_PERI_REG_BITS2(SENS_SAR_SLAVE_ADDR1_REG, 0x7, SENS_SARADC_MEAS_STATUS_S) != 0); //wait det_fsm==
+
+    initialized = true;
+}
+
+uint16_t IRAM_ATTR adcRead(uint8_t channel)
+{
+    __analogInit();
+        if(channel < 0){
+        return false;//not adc pin
+    }
+
+    if(channel > 9){
+        channel -= 10;
+        CLEAR_PERI_REG_MASK(SENS_SAR_MEAS2_CTRL2_REG, SENS_MEAS2_START_SAR_M);
+        SET_PERI_REG_BITS(SENS_SAR_MEAS2_CTRL2_REG, SENS_SAR2_EN_PAD, (1 << channel), SENS_SAR2_EN_PAD_S);
+        SET_PERI_REG_MASK(SENS_SAR_MEAS2_CTRL2_REG, SENS_MEAS2_START_SAR_M);
+    } else {
+        CLEAR_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_START_SAR_M);
+        SET_PERI_REG_BITS(SENS_SAR_MEAS1_CTRL2_REG, SENS_SAR1_EN_PAD, (1 << channel), SENS_SAR1_EN_PAD_S);
+        SET_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_START_SAR_M);
+    }
+
+    uint16_t value = 0;
+
+    //修改7
+    if(channel > 9){
+        while (GET_PERI_REG_MASK(SENS_SAR_MEAS2_CTRL2_REG, SENS_MEAS2_DONE_SAR) == 0); //wait for conversion
+        value = GET_PERI_REG_BITS2(SENS_SAR_MEAS2_CTRL2_REG, SENS_MEAS2_DATA_SAR, SENS_MEAS2_DATA_SAR_S);
+    } else {
+        while (GET_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_DONE_SAR) == 0); //wait for conversion
+        value = GET_PERI_REG_BITS2(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_DATA_SAR, SENS_MEAS1_DATA_SAR_S);
+    }
+
+    // Shift result if necessary
+    uint8_t from = __analogWidth + 9;
+    if (from == __analogReturnedWidth) {
+        return value;
+    }
+    if (from > __analogReturnedWidth) {
+        return value >> (from - __analogReturnedWidth);
+    }
+    return value << (__analogReturnedWidth - from);
+    return value;
+}
+
 // 电流采样回调函数（中断上下文内，需遵循IRAM_ATTR等规则）
 static bool IRAM_ATTR on_timer_event_cb(mcpwm_timer_handle_t timer, const mcpwm_timer_event_data_t *edata, void *user_data) {
     // 检查是否是定时器达到峰值（TEP）的事件
     struct LowsideCurrentSense *current_sense = (struct LowsideCurrentSense *)user_data;
 
-    cnt++;
-    if (++current_sense->adc_task_cnt < 25000) {
-        // return true;
-    }
-    current_sense->adc_task_cnt = 0;
-
-    current_sense->adc_value_a = adcRead(3);
-    current_sense->adc_value_b = adcRead(4);
+    current_sense->adc_value_a = adcRead(current_sense->channel_a);
+    current_sense->adc_value_b = adcRead(current_sense->channel_b);
     /*
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     vTaskNotifyGiveFromISR(current_sense->adc_task_handle, &xHigherPriorityTaskWoken);
@@ -77,17 +159,6 @@ static bool IRAM_ATTR on_timer_event_cb(mcpwm_timer_handle_t timer, const mcpwm_
     return true; // 返回值含义需查阅文档，通常false表示未占用更高优先级任务
 }
 
-void adc_task(void *params) {
-    struct LowsideCurrentSense *current_sense = (struct LowsideCurrentSense *)params;
-    while (true) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        lowside_current_sense_read_voltage(current_sense);
-        printf("cnt: %lld\n", cnt);
-        cnt = 0;
-        // vTaskDelay(pdMS_TO_TICKS(1));
-    }
-}
-
 adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit() {
     static adc_oneshot_unit_handle_t adc_handle;
     static int init_flag = 0;
@@ -96,7 +167,7 @@ adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit() {
     }
     adc_oneshot_unit_init_cfg_t init_config1 = {
         .unit_id = ADC_UNIT_1,          // 选择ADC单元，例如ADC_UNIT_1
-        .ulp_mode = ADC_ULP_MODE_DISABLE,
+        // .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
     // 创建ADC单元句柄
     esp_err_t ret = adc_oneshot_new_unit(&init_config1, &adc_handle);
@@ -104,6 +175,16 @@ adc_oneshot_unit_handle_t new_lowside_current_sense_adc_unit() {
         ESP_LOGE(TAG, "create adc failed!");
         return NULL;
     }
+
+    // 电源使能
+    // SET_PERI_REG_MASK(RTC_CNTL_ANA_CONF_REG, RTC_CNTL_PG_PADC_M);
+
+    esp_rom_delay_us(10);
+    // 配置ADC1为12位模式
+    // SET_PERI_REG_BITS(SENS_SAR_START_FORCE_REG, SENS_SAR1_BIT_WIDTH, 3, SENS_SAR1_BIT_WIDTH_S);
+    
+    // 配置衰减（0-11dB）
+    // SET_PERI_REG_BITS(SENS_SAR_ATTEN1_REG, SENS_SAR1_ATTEN, ADC_ATTEN_DB_11, SENS_SAR1_ATTEN_S);
 
     init_flag = 1;
     return adc_handle;
@@ -150,11 +231,10 @@ struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain,
     lowside_current_sense->foc_current = 0.0f;
     lowside_current_sense->foc_lowpass_filter = 0.0f;
 
-    lowside_current_sense->adc_task_cnt = 0;
     // 创建电流采样的task
-    char buf[32];
-    snprintf(buf, sizeof(buf), "adc_task_%d", rand() % 100);
-    xTaskCreatePinnedToCore(&adc_task, buf, 4 * 1024, lowside_current_sense, 5, &lowside_current_sense->adc_task_handle, 1);
+    // char buf[32];
+    // snprintf(buf, sizeof(buf), "adc_task_%d", rand() % 100);
+    // xTaskCreatePinnedToCore(&adc_task, buf, 4 * 1024, lowside_current_sense, 5, &lowside_current_sense->adc_task_handle, 1);
     // 注册电流传感器的回调
     mcpwm_timer_event_callbacks_t cbs = {
         .on_full = on_timer_event_cb,
@@ -198,9 +278,10 @@ void lowside_current_sense_read_voltage(struct LowsideCurrentSense *lcs) {
 struct PhaseCurrent read_current(struct CurrentSense *current_sense) {
     struct LowsideCurrentSense *lcs = current_sense->current_sense;
     // lowside_current_sense_read_voltage(current_sense->current_sense);
+    printf("a: %d, b: %d, c: %d\n", lcs->adc_value_a, lcs->adc_value_b, lcs->adc_value_c);
     lcs->voltage_a = (lcs->adc_value_a * 3.3) / 4095.0;
     lcs->voltage_b = (lcs->adc_value_b * 3.3) / 4095.0;
-    // lcs->voltage_c = -(lcs->voltage_a + lcs->voltage_b);
+    lcs->voltage_c = -(lcs->voltage_a + lcs->voltage_b);
     lcs->voltage_c = 0;
 
     lcs->current_a = (lcs->voltage_a - lcs->offset_a) * lcs->gain_a * -1;
