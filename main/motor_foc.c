@@ -155,7 +155,7 @@ struct Motor* new_foc_motor_ledc(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_nu
     return motor;
 }
 
-#define _PWM_FREQUENCY 25000
+#define _PWM_FREQUENCY 20000
 #define _PWM_TIMEBASE_RESOLUTION_HZ 160e6f
 #define PERIOD_TICKS (uint32_t)(_PWM_TIMEBASE_RESOLUTION_HZ / _PWM_FREQUENCY)
 struct Motor* new_foc_motor(gpio_num_t pin_in1, gpio_num_t pin_in2, gpio_num_t pin_in3,
@@ -534,7 +534,7 @@ float velocityClosedloop(struct Motor* motor, float target_velocity) {
 
     if (motor->cnt >= 1000) {
         float iq = motor->current_sense->get_foc_current(motor->current_sense, _electricalAngle(motor));
-        printf("iq: %f\n", iq);
+        // printf("iq: %f\n", iq);
         // struct PhaseCurrent current = motor->current_sense->read_current(motor->current_sense);
         // struct LowsideCurrentSense *lcs = motor->current_sense->current_sense;
         /*

@@ -14,9 +14,10 @@ struct Motor *left_motor, *right_motor;
 
 void foc_driver() {
     while (1) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        // ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         left_motor->run(left_motor);
         // right_motor->run(right_motor);
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -48,15 +49,15 @@ void app_main(void)
     right_motor->init(right_motor);
     */
 
-    left_motor->target_velocity = 50;
+    left_motor->target_velocity = 10;
     // right_motor->target_velocity = 10;
 
     xTaskCreatePinnedToCore(&foc_driver, "foc_driver", 4 * 1024, NULL, 5, &foc_driver_task_handle, 1);
 
     while(1)
     {
-        // vTaskDelay(pdMS_TO_TICKS(1));
-        xTaskNotifyGive(foc_driver_task_handle);
+        vTaskDelay(pdMS_TO_TICKS(1));
+        // xTaskNotifyGive(foc_driver_task_handle);
         /*
         BaseType_t status = pdFALSE;
         vTaskNotifyGiveFromISR(foc_driver_task_handle, &status);

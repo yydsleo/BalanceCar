@@ -52,6 +52,12 @@ void __analogSetAttenuation(uint8_t attenuation)
     WRITE_PERI_REG(SENS_SAR_ATTEN2_REG, att_data);
 }
 
+void __analogSetCycles(uint8_t cycles){
+    __analogCycles = cycles;
+    // SET_PERI_REG_BITS(SENS_SAR_READER1_CTRL_REG, SENS_SAR1_SAMPLE_CYCLE, __analogCycles, SENS_SAR1_SAMPLE_CYCLE_S);
+    // SET_PERI_REG_BITS(SENS_SAR_READER2_CTRL_REG, SENS_SAR2_SAMPLE_CYCLE, __analogCycles, SENS_SAR2_SAMPLE_CYCLE_S);
+}
+
 void __analogSetSamples(uint8_t samples){
     if(!samples){
         return;
@@ -70,6 +76,30 @@ void __analogSetClockDiv(uint8_t clockDiv){
     SET_PERI_REG_BITS(SENS_SAR_READER2_CTRL_REG, SENS_SAR2_CLK_DIV, __analogClockDiv, SENS_SAR2_CLK_DIV_S);
 }
 
+void __analogSetWidth(uint8_t bits){
+    if(bits < 9){
+        bits = 9;
+    } else if(bits > 12){
+        bits = 12;
+    }
+    __analogReturnedWidth = bits;
+    __analogWidth = bits - 9;
+    // SET_PERI_REG_BITS(SENS_SAR_START_FORCE_REG, SENS_SAR1_BIT_WIDTH, __analogWidth, SENS_SAR1_BIT_WIDTH_S);
+    // SET_PERI_REG_BITS(SENS_SAR_READER1_CTRL_REG, SENS_SAR1_SAMPLE_BIT, __analogWidth, SENS_SAR1_SAMPLE_BIT_S);
+
+    // SET_PERI_REG_BITS(SENS_SAR_START_FORCE_REG, SENS_SAR2_BIT_WIDTH, __analogWidth, SENS_SAR2_BIT_WIDTH_S);
+    // SET_PERI_REG_BITS(SENS_SAR_READER2_CTRL_REG, SENS_SAR2_SAMPLE_BIT, __analogWidth, SENS_SAR2_SAMPLE_BIT_S);
+}
+
+void __analogReadResolution(uint8_t bits)
+{
+    if(!bits || bits > 16){
+        return;
+    }
+    __analogSetWidth(bits);         // hadware from 9 to 12
+    __analogReturnedWidth = bits;   // software from 1 to 16
+}
+
 void IRAM_ATTR __analogInit(){
     static bool initialized = false;
     if(initialized){
@@ -77,9 +107,10 @@ void IRAM_ATTR __analogInit(){
     }
 
     __analogSetAttenuation(3);
+    __analogSetCycles(__analogCycles);
     __analogSetSamples(1);//in samples
     __analogSetClockDiv(1);
-    // __analogSetWidth(3 + 9);//in bits
+    __analogSetWidth(__analogWidth + 9);
 
     SET_PERI_REG_MASK(SENS_SAR_READER1_CTRL_REG, SENS_SAR1_DATA_INV);
     SET_PERI_REG_MASK(SENS_SAR_READER2_CTRL_REG, SENS_SAR2_DATA_INV);
@@ -103,7 +134,7 @@ void IRAM_ATTR __analogInit(){
 
 uint16_t IRAM_ATTR adcRead(uint8_t channel)
 {
-    __analogInit();
+     __analogInit();
         if(channel < 0){
         return false;//not adc pin
     }
@@ -139,7 +170,6 @@ uint16_t IRAM_ATTR adcRead(uint8_t channel)
         return value >> (from - __analogReturnedWidth);
     }
     return value << (__analogReturnedWidth - from);
-    return value;
 }
 
 // 电流采样回调函数（中断上下文内，需遵循IRAM_ATTR等规则）
@@ -198,6 +228,7 @@ struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain,
     }
     memset(lowside_current_sense, 0, sizeof(struct LowsideCurrentSense));
 
+    /*
     adc_oneshot_chan_cfg_t config = {
         .atten = ADC_ATTEN_DB_11,   // 设置衰减，以调整测量电压范围
         .bitwidth = ADC_BITWIDTH_12, // 设置输出位宽
@@ -215,6 +246,16 @@ struct CurrentSense* new_lowside_current_sense(float shunt_resistor, float gain,
     }
     if (pin_c != 0) {
         ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, get_channel_by_pin(pin_c), &config)); // 此处以配置通道2为例
+        lowside_current_sense->channel_c = get_channel_by_pin(pin_c);
+    }
+        */
+    if (pin_a != 0) {
+        lowside_current_sense->channel_a = get_channel_by_pin(pin_a);
+    }
+    if (pin_b != 0) {
+        lowside_current_sense->channel_b = get_channel_by_pin(pin_b);
+    }
+    if (pin_c != 0) {
         lowside_current_sense->channel_c = get_channel_by_pin(pin_c);
     }
 
